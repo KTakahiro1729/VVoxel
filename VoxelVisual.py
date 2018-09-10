@@ -2,6 +2,8 @@ import bpy
 import itertools, math
 import numpy as np
 import os
+import datetime
+now = datetime.datetime.now
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import (
         StringProperty,
@@ -27,19 +29,25 @@ bl_info = {
 
 
 def add_voxel(voxel):
+    print("start")
+    start = datetime.datetime.now()
     zerostart = np.zeros(np.add(voxel.shape,(2,2,2)))
     zerostart[1:-1,1:-1,1:-1] = voxel
     z_diff = np.diff(zerostart,axis=0)
     y_diff = np.diff(zerostart,axis=1)
     x_diff = np.diff(zerostart,axis=2)
-    vs = []
-    vs.append(add_planes(z_diff, "z"))
-    vs.append(add_planes(y_diff, "y"))
-    vs.append(add_planes(x_diff, "x"))
-    vs = list(itertools.chain(*[i for i in itertools.chain(*vs) if i != None]))
+
+    vsz = add_planes(z_diff, "z")
+    vsy = add_planes(y_diff, "y")
+    vsx = add_planes(x_diff, "x")
+
+
+    vs = np.concatenate((vsz,vsy,vsx))
+    vs = np.array(vs)
     fs = np.arange(len(vs)).reshape(len(vs)//4,4)
     vs, fs = remove_doubles(vs,fs)
     add_obj(vs,fs,"voxel")
+    print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
 def add_obj(vs,fs,name="voxel"):
     mesh_data = bpy.data.meshes.new(name+"_mesh_data")
     mesh_data.from_pydata(vs,[],fs)
@@ -47,13 +55,22 @@ def add_obj(vs,fs,name="voxel"):
     obj = bpy.data.objects.new(name+"_object", mesh_data)
     scene = bpy.context.scene
     scene.objects.link(obj)
+    obj.select = True
 def add_planes(normals_array, axis):
     ns = normals_array.shape
     z,y,x = np.mgrid[:ns[0],:ns[1],:ns[2]]
+    start = now()
     vs = np.vectorize(add_plane)(x,y,z,axis,normals_array).flatten()
-
+    print(1,now()-start)
+    start = now()
+    vs = vs[vs!=np.array(None)]
+    vs = np.hstack(vs)
+    print(2,now()-start)
+    vs = vs.reshape(vs.size//3,3)
     return vs
 def add_plane(x,y,z,axis,normal):
+    if normal == 0:
+        return None
     if axis == "x":
         offset = (0,-0.5,-0.5)
     elif axis == "y":
@@ -61,11 +78,11 @@ def add_plane(x,y,z,axis,normal):
     elif axis == "z":
         offset = (-0.5,-0.5,0)
     loc = np.multiply((1,-1,-1), np.add((x,y,z),offset))
-    if normal != 0:
-        return add_face(loc, axis, normal)
+    return add_face(loc, axis, normal)
 def parse_offset(offs):
+
     dict_ = {"0":0,"+":0.5,"-":-0.5}
-    return [tuple(dict_[i] for i in off) for off in offs.split(";")]
+    return [[dict_[i] for i in off] for off in offs.split(";")]
 def add_face(loc, axis, normal):
     if axis == "x":
         v_offs = parse_offset("0-+;0++;0+-;0--")
@@ -76,8 +93,7 @@ def add_face(loc, axis, normal):
     if normal == -1:
         v_offs = v_offs[::-1]
     vs = [add_vec(loc,v_off) for v_off in v_offs]
-    return vs
-
+    return list(np.hstack(vs))
 def add_vec(x,y):
     return tuple(x[i]+y[i] for i in range(len(x)))
 def remove_doubles(vs, fs):
@@ -85,6 +101,7 @@ def remove_doubles(vs, fs):
     new_vs = []
     old_new = []
     for i, v in enumerate(vs):
+        v = tuple(v)
         if v in usedvs_index.keys():
             old_new.append(old_new[usedvs_index[v]])
         else:
@@ -94,6 +111,7 @@ def remove_doubles(vs, fs):
     new_fs = [tuple(old_new[v] for v in f) for f in fs]
 
     return new_vs, new_fs
+
 
 class AddVoxel(bpy.types.Operator):
     bl_idname  = "object.add_voxel"
