@@ -46,16 +46,21 @@ def add_voxel(voxel):
     vs_ = np.fliplr(vs_)
     fs = np.arange(len(vs_))
     vs_, fs = remove_doubles(vs_,fs)
-    add_obj(vs_.tolist(),fs.reshape(fs.size//4,4).tolist(),"voxel")
+    v_object = add_obj(vs_.tolist(),[],fs.reshape(fs.size//4,4).tolist(),"voxel")
+    bvs = np.multiply(np.array(list(itertools.product(range(2),range(2),range(2)))),voxel.shape[::-1]).tolist()
+    o_object = add_obj(bvs, np.matrix("0,1;0,2;0,4;1,3;1,5;2,3;2,6;3,7;4,5;4,6;5,7;6,7").tolist(),[],"outline")
+    v_object.parent = o_object
+    o_object.location = bpy.context.scene.cursor_location
     print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
-def add_obj(vs,fs,name="voxel"):
+def add_obj(vs,es,fs,name):
     mesh_data = bpy.data.meshes.new(name+"_mesh_data")
-    mesh_data.from_pydata(vs,[],fs)
+    mesh_data.from_pydata(vs,es,fs)
     mesh_data.update()
     obj = bpy.data.objects.new(name+"_object", mesh_data)
     scene = bpy.context.scene
     scene.objects.link(obj)
     obj.select = True
+    return obj
 
 def vs(diff,axis):
     before = now()
@@ -111,7 +116,7 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
     def execute(self, context):
         import os
         fname = bpy.path.abspath(self.properties.filepath)
-        print(fname)
+        print("reading: ", fname)
         if os.path.isfile(fname):
             array3d = np.load(fname)
             add_voxel(array3d)
