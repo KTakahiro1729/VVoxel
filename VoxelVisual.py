@@ -58,7 +58,8 @@ def add_obj(vs,fs,name="voxel"):
 
 def vs(diff,axis):
     before = now()
-    loc=np.mgrid[:diff.shape[0],:diff.shape[1],:diff.shape[2]]
+    ds = diff.shape
+    loc = np.mgrid[ds[0]-1:-1:-1,ds[1]-1:-1:-1,:ds[2]].astype(np.uint16)
     loc = np.swapaxes(np.rollaxis(loc,0,-1),-1,-2)
     flat_loc = loc.flatten().reshape(loc.size//3,3)
     del loc
@@ -66,36 +67,27 @@ def vs(diff,axis):
     del diff
     skip_loc = flat_loc[flat_diff!=np.array(0)]
     del flat_loc
-    skip_loc[:,:-1] = -skip_loc[:,:-1]
 
     skip_diff = flat_diff[flat_diff != np.array(0)]
     del flat_diff
     minus_idx = np.where(skip_diff == -1)
     del skip_diff
-    center_off = np.array({"z":[0.0,0.5,-0.5],"y":[0.5,0.0,-0.5], "x":[0.5,0.5,0.0]}[axis])
     print(1,now()-before)
     before = now()
-    centers = np.empty(skip_loc.shape)
-    for i in range(3):
-        centers[...,i] = skip_loc[...,i] + center_off[i]
-    result = np.empty(centers.shape[:-1]+(4,3))
-    print(2,now()-before)
-    before = now()
-    around_off ={'z': [[0, -0.5, 0.5], [0, 0.5, 0.5], [0, 0.5, -0.5], [0, -0.5, -0.5]],
- 'y': [[0.5, 0, 0.5], [-0.5, 0, 0.5], [-0.5, 0, -0.5], [0.5, 0, -0.5]],
- 'x': [[0.5, -0.5, 0], [0.5, 0.5, 0], [-0.5, 0.5, 0], [-0.5, -0.5, 0]]}[axis]
+    result = np.empty(skip_loc.shape[:-1]+(4,3)).astype(np.uint16)
+    around_off ={'z': [[0, -1, 0], [0, 0, 0], [0, 0, -1], [0, -1, -1]],
+ 'y': [[0, 0, 0], [-1, 0, 0], [-1, 0, -1], [0, 0, -1]],
+ 'x': [[0, -1, 0], [0, 0, 0], [-1, 0, 0], [-1, -1, 0]]}[axis]
     for i in range(4):
         for j in range(3):
-            result[...,i,j] = around_off[i][j] + centers[...,j]
-    print(3,now()-before)
+            result[...,i,j] = around_off[i][j] + skip_loc[...,j]
+    print(2,now()-before)
     before = now()
     result[minus_idx] = np.flip(result[minus_idx],1)
     result = result.flatten().reshape(result.size//3,3)
-    print(4,now()-before)
+    print(3,now()-before)
     before = now()
-
     return result
-
 def remove_doubles(vs,fs):
     print("number of verteces: ",len(vs))
     start = now()
