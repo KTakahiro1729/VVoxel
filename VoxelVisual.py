@@ -45,7 +45,7 @@ def add_voxel(voxel):
     vs_ = np.fliplr(vs_)
     fs = np.arange(len(vs_))
     vs_, fs = remove_doubles(vs_,fs)
-    add_obj(vs_,fs.reshape(fs.size//4,4).tolist(),"voxel")
+    add_obj(vs_.tolist(),fs.reshape(fs.size//4,4).tolist(),"voxel")
     print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
 def add_obj(vs,fs,name="voxel"):
     mesh_data = bpy.data.meshes.new(name+"_mesh_data")
@@ -95,26 +95,15 @@ def vs(diff,axis):
     before = now()
 
     return result
-def remove_doubles(vs, fs):
+
+def remove_doubles(vs,fs):
     print("number of verteces: ",len(vs))
     start = now()
-    usedvs_index = dict([])
-    new_vs = []
-    old_new = []
-
-    for i, v in enumerate(vs):
-        v = tuple(v)
-        if v in usedvs_index.keys():
-            old_new.append(old_new[usedvs_index[v]])
-        else:
-            usedvs_index[v] = i
-            old_new.append(len(new_vs))
-            new_vs.append(v)
-    new_fs = np.vectorize(lambda i:old_new[i])(fs)
+    new_vs, inverse = np.unique(vs,return_inverse=True,axis=0)
+    new_fs = inverse[fs]
     print("number of verteces: ",len(new_vs))
     print("remove doubles took: ",now()-start)
     return new_vs, new_fs
-
 
 class AddVoxel(bpy.types.Operator):
     bl_idname  = "object.add_voxel"
