@@ -1,4 +1,5 @@
 import bpy
+from bpy_extras.io_utils import ImportHelper
 import itertools, math
 import numpy as np
 import os
@@ -97,43 +98,32 @@ def remove_doubles(vs,fs):
     print("remove doubles took: ",now()-start)
     return new_vs, new_fs
 
-class AddVoxel(bpy.types.Operator):
+class AddVoxel(bpy.types.Operator,ImportHelper):
     bl_idname  = "object.add_voxel"
     bl_label = "Voxel From .npy"
     bl_description = "outputs the locations of the markers in the 3DView"
     bl_options = {"REGISTER", "UNDO"}
 
-    # files = CollectionProperty(
-    #         name="File Path",
-    #         type=OperatorFileListElement,
-    #         )
-    fname = StringProperty(
-            subtype='FILE_PATH',
-            )
+    filename_ext = ".npy"
+    filter_glob = StringProperty(default="*.npy", options={'HIDDEN'})
 
-    filename_ext = ""
 
     def execute(self, context):
         import os
-        fname = bpy.path.abspath(self.fname)
+        fname = bpy.path.abspath(self.properties.filepath)
+        print(fname)
         if os.path.isfile(fname):
             array3d = np.load(fname)
             add_voxel(array3d)
         return {'FINISHED'}
-    #
-    # def execute(self, context):
-    #     # read .npy
-    #     directory = self.directory
-    #     # filename =self.array3d_fname
-    #     filename = "temp.npy"
-    #     print(self.new_num)
-    #     array3d = np.load(filename)
-    #     add_voxel(array3d)
-
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
 
 
         return {"FINISHED"}
 def menu_fn(self, context):
+    self.layout.operator_context = 'INVOKE_DEFAULT'
     self.layout.separator()
     self.layout.operator(AddVoxel.bl_idname)
 def register():
