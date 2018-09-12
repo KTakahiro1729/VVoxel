@@ -53,6 +53,8 @@ def add_voxel(voxel, self):
     bvs = np.multiply(np.array(list(itertools.product(range(2),range(2),range(2)))),voxel.shape[::-1]).tolist()
     o_object = add_obj(bvs, np.matrix("0,1;0,2;0,4;1,3;1,5;2,3;2,6;3,7;4,5;4,6;5,7;6,7").tolist(),[],"outline")
     v_object.parent = o_object
+    v_object.rotation_euler[0] = np.pi
+    v_object.location = (0,voxel.shape[1],voxel.shape[0])
     o_object.location = bpy.context.scene.cursor_location
     o_object.scale = self.rescale
     print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
@@ -70,7 +72,7 @@ def add_obj(vs,es,fs,name):
 def vs(diff,axis):
     before = now()
     ds = diff.shape
-    loc = np.mgrid[ds[0]-1:-1:-1,ds[1]-1:-1:-1,:ds[2]].astype(np.uint16)
+    loc = np.mgrid[:ds[0],:ds[1],:ds[2]].astype(np.uint16)
     loc = np.swapaxes(np.rollaxis(loc,0,-1),-1,-2)
     flat_loc = loc.flatten().reshape(loc.size//3,3)
     del loc
@@ -86,8 +88,8 @@ def vs(diff,axis):
     print(1,now()-before)
     before = now()
     result = np.empty(skip_loc.shape[:-1]+(4,3)).astype(np.uint16)
-    around_off ={'z': [[0, -1, 0], [0, 0, 0], [0, 0, -1], [0, -1, -1]],
- 'y': [[0, 0, 0], [-1, 0, 0], [-1, 0, -1], [0, 0, -1]],
+    around_off ={'z': [[0, 0, -1], [0, 0, 0], [0, -1, 0], [0, -1, -1]],
+ 'y': [[0, 0, 0], [0, 0, -1], [-1, 0, -1], [-1, 0, 0]],
  'x': [[0, -1, 0], [0, 0, 0], [-1, 0, 0], [-1, -1, 0]]}[axis]
     for i in range(4):
         for j in range(3):
