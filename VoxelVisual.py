@@ -9,6 +9,7 @@ now = datetime.datetime.now
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import (
         StringProperty,
+        IntProperty,
         CollectionProperty,
         )
 from bpy.types import (
@@ -30,12 +31,14 @@ bl_info = {
 }
 
 
-def add_voxel(voxel):
+def add_voxel(voxel, max_verts):
     print("start")
     start = now()
-    zerostart = np.zeros(np.add(voxel.shape,(2,2,2)))
+    zerostart = np.zeros(np.add(voxel.shape,(2,2,2)),dtype=int)
     zerostart[1:-1,1:-1,1:-1] = voxel
     z_diff = np.diff(zerostart,axis=0)
+    if z_diff[z_diff!=0].size > max_verts:
+        return "TOO_MANY_VERTS"
     y_diff = np.diff(zerostart,axis=1)
     x_diff = np.diff(zerostart,axis=2)
 
@@ -52,6 +55,7 @@ def add_voxel(voxel):
     v_object.parent = o_object
     o_object.location = bpy.context.scene.cursor_location
     print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
+    return "FINISHED"
 def add_obj(vs,es,fs,name):
     mesh_data = bpy.data.meshes.new(name+"_mesh_data")
     mesh_data.from_pydata(vs,es,fs)
@@ -95,11 +99,11 @@ def vs(diff,axis):
     before = now()
     return result
 def remove_doubles(vs,fs):
-    print("number of verteces: ",len(vs))
+    print("number of vertices: ",len(vs))
     start = now()
     new_vs, inverse = np.unique(vs,return_inverse=True,axis=0)
     new_fs = inverse[fs]
-    print("number of verteces: ",len(new_vs))
+    print("number of vertices: ",len(new_vs))
     print("remove doubles took: ",now()-start)
     return new_vs, new_fs
 
@@ -112,6 +116,7 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
     filename_ext = ".npy"
     filter_glob = StringProperty(default="*.npy", options={'HIDDEN'})
 
+    complexity = IntProperty(name="complexity", description = "Maximum computable complexity voxel", default = 10)
 
     def execute(self, context):
         import os
@@ -119,8 +124,18 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
         print("reading: ", fname)
         if os.path.isfile(fname):
             array3d = np.load(fname)
-            add_voxel(array3d)
-        return {'FINISHED'}
+            if array3d.dtype != bool:
+                self.report({"ERROR"}, "Please set a array of bool. It is currently: {0}".format(array3d.dtype))
+                return {"CANCELLED"}
+            result = add_voxel(array3d, max_verts = self.complexity*10000)
+            if result =="FINISHED":
+                return {'FINISHED'}
+            elif result == "TOO_MANY_VERTS":
+                self.report({"ERROR"},"The voxel is too complex.")
+                return {"CANCELLED"}
+        else:
+            self.report({"ERROR"},"No such File")
+            return{"CANCELLED"}
     def invoke(self, context, event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
