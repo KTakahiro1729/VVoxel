@@ -10,7 +10,7 @@ from bpy_extras.io_utils import ExportHelper
 from bpy.props import (
         StringProperty,
         IntProperty,
-        CollectionProperty,
+        FloatVectorProperty
         )
 from bpy.types import (
         Operator,
@@ -31,13 +31,13 @@ bl_info = {
 }
 
 
-def add_voxel(voxel, max_verts):
+def add_voxel(voxel, self):
     print("start")
     start = now()
     zerostart = np.zeros(np.add(voxel.shape,(2,2,2)),dtype=int)
     zerostart[1:-1,1:-1,1:-1] = voxel
     z_diff = np.diff(zerostart,axis=0)
-    if z_diff[z_diff!=0].size > max_verts:
+    if z_diff[z_diff!=0].size > self.complexity*10000:
         return "TOO_MANY_VERTS"
     y_diff = np.diff(zerostart,axis=1)
     x_diff = np.diff(zerostart,axis=2)
@@ -54,6 +54,7 @@ def add_voxel(voxel, max_verts):
     o_object = add_obj(bvs, np.matrix("0,1;0,2;0,4;1,3;1,5;2,3;2,6;3,7;4,5;4,6;5,7;6,7").tolist(),[],"outline")
     v_object.parent = o_object
     o_object.location = bpy.context.scene.cursor_location
+    o_object.scale = self.rescale
     print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
     return "FINISHED"
 def add_obj(vs,es,fs,name):
@@ -117,7 +118,7 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
     filter_glob = StringProperty(default="*.npy", options={'HIDDEN'})
 
     complexity = IntProperty(name="complexity", description = "Maximum computable complexity voxel", default = 10)
-
+    rescale = FloatVectorProperty(name="rescale", description = "rescale the voxel", default=(1.0,1.0,1.0),subtype="XYZ")
     def execute(self, context):
         import os
         fname = bpy.path.abspath(self.properties.filepath)
@@ -127,7 +128,7 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
             if array3d.dtype != bool:
                 self.report({"ERROR"}, "Please set a array of bool. It is currently: {0}".format(array3d.dtype))
                 return {"CANCELLED"}
-            result = add_voxel(array3d, max_verts = self.complexity*10000)
+            result = add_voxel(array3d, self)
             if result =="FINISHED":
                 return {'FINISHED'}
             elif result == "TOO_MANY_VERTS":
