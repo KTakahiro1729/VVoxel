@@ -29,36 +29,6 @@ bl_info = {
     "tracker_url" : "",
     "category" : "Object",
 }
-
-
-def add_voxel(voxel, self):
-    print("start")
-    start = now()
-    zerostart = np.zeros(np.add(voxel.shape,(2,2,2)),dtype=int)
-    zerostart[1:-1,1:-1,1:-1] = voxel
-    z_diff = np.diff(zerostart,axis=0)
-    if z_diff[z_diff!=0].size > self.complexity*10000:
-        return "TOO_MANY_VERTS"
-    y_diff = np.diff(zerostart,axis=1)
-    x_diff = np.diff(zerostart,axis=2)
-
-    z_vs = vs(z_diff,"z")
-    y_vs = vs(y_diff,"y")
-    x_vs = vs(x_diff,"x")
-    vs_ = np.concatenate((z_vs,y_vs,x_vs))
-    vs_ = np.fliplr(vs_)
-    fs = np.arange(len(vs_))
-    vs_, fs = remove_doubles(vs_,fs)
-    v_object = add_obj(vs_.tolist(),[],fs.reshape(fs.size//4,4).tolist(),"voxel")
-    bvs = np.multiply(np.array(list(itertools.product(range(2),range(2),range(2)))),voxel.shape[::-1]).tolist()
-    o_object = add_obj(bvs, np.matrix("0,1;0,2;0,4;1,3;1,5;2,3;2,6;3,7;4,5;4,6;5,7;6,7").tolist(),[],"outline")
-    v_object.parent = o_object
-    v_object.rotation_euler[0] = np.pi
-    v_object.location = (0,voxel.shape[1],voxel.shape[0])
-    o_object.location = bpy.context.scene.cursor_location
-    o_object.scale = self.rescale
-    print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
-    return "FINISHED"
 def add_obj(vs,es,fs,name):
     mesh_data = bpy.data.meshes.new(name+"_mesh_data")
     mesh_data.from_pydata(vs,es,fs)
@@ -66,10 +36,58 @@ def add_obj(vs,es,fs,name):
     obj = bpy.data.objects.new(name+"_object", mesh_data)
     scene = bpy.context.scene
     scene.objects.link(obj)
-    obj.select = True
     return obj
+def add_outline(shape, voxel_obj, self):
+    vs = np.multiply(list(itertools.product(*[[0,1]]*3)),shape[::-1]).tolist()
+    es =  np.matrix("0,1;0,2;0,4;1,3;1,5;2,3;2,6;3,7;4,5;4,6;5,7;6,7").tolist()
+    outline_obj = add_obj(vs,es,[],"outline")
+    voxel_obj.parent = outline_obj
+    voxel_obj.rotation_euler[0] = np.pi
+    voxel_obj.location = (0,shape[1],shape[0])
+    outline_obj.location = bpy.context.scene.cursor_location
+    outline_obj.scale = self.rescale
+    return outline_obj
 
-def vs(diff,axis):
+def add_voxel_surface(array3d, self):
+    print("start")
+    start = now()
+
+    result = calc_vs(array3d, complexity = self.complexity)
+    if result == "TOO_MANY_VERTS":
+        self.report({"ERROR"},"The voxel is too complex.")
+        return result
+    vs, fs = result
+
+    # add object to blender
+    voxel_obj = add_obj(vs,[],fs,"voxel_surface")
+    voxel_obj.select = True
+    outline_obj = add_outline(array3d.shape, voxel_obj, self)
+    outline_obj.select = True
+
+    print("took {0}secs".format((datetime.datetime.now() - start).total_seconds()))
+    return "FINISHED"
+
+def calc_vs(voxel, complexity=10):
+    zerostart = np.zeros(np.add(voxel.shape,(2,2,2)),dtype=int)
+    zerostart[1:-1,1:-1,1:-1] = voxel
+    z_diff = np.diff(zerostart,axis=0)
+    if z_diff[z_diff!=0].size > complexity*10000:
+        return "TOO_MANY_VERTS"
+    y_diff = np.diff(zerostart,axis=1)
+    x_diff = np.diff(zerostart,axis=2)
+
+    z_vs = calc_axis_vs(z_diff,"z")
+    y_vs = calc_axis_vs(y_diff,"y")
+    x_vs = calc_axis_vs(x_diff,"x")
+    vs = np.concatenate((z_vs,y_vs,x_vs))
+    vs = np.fliplr(vs)
+    fs = np.arange(len(vs))
+    vs, fs = remove_doubles(vs,fs)
+    vs = vs.tolist()
+    fs = fs.reshape(fs.size//4,4).tolist()
+    return vs, fs
+
+def calc_axis_vs(diff,axis):
     before = now()
     ds = diff.shape
     loc = np.mgrid[:ds[0],:ds[1],:ds[2]].astype(np.uint16)
@@ -110,9 +128,9 @@ def remove_doubles(vs,fs):
     print("remove doubles took: ",now()-start)
     return new_vs, new_fs
 
-class AddVoxel(bpy.types.Operator,ImportHelper):
-    bl_idname  = "object.add_voxel"
-    bl_label = "Voxel From .npy"
+class AddVoxelSurface(bpy.types.Operator,ImportHelper):
+    bl_idname  = "object.add_voxel_surface"
+    bl_label = "Voxel Surface From .npy"
     bl_description = "outputs the locations of the markers in the 3DView"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -130,11 +148,10 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
             if array3d.dtype != bool:
                 self.report({"ERROR"}, "Please set a array of bool. It is currently: {0}".format(array3d.dtype))
                 return {"CANCELLED"}
-            result = add_voxel(array3d, self)
+            result = add_voxel_surface(array3d, self)
             if result =="FINISHED":
                 return {'FINISHED'}
-            elif result == "TOO_MANY_VERTS":
-                self.report({"ERROR"},"The voxel is too complex.")
+            else:
                 return {"CANCELLED"}
         else:
             self.report({"ERROR"},"No such File")
@@ -143,12 +160,56 @@ class AddVoxel(bpy.types.Operator,ImportHelper):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+def add_voxel_verts(array3d, self):
+    ars = array3d.shape
+    locs = np.mgrid[:ars[0],:ars[1],:ars[2]]
+    locs = np.moveaxis(locs,0,-1)
+    # print(locs)
+    # print(ars)
+    verts_object = add_obj(np.fliplr(locs[array3d]).tolist(),[],[],"voxel_verts")
+    verts_object.select = True
+    verts_object.dupli_type = "VERTS"
+    # primitive cube that is the min unit
+    atom_vs,atom_fs = calc_vs(np.array([[[1]]]))
+    atom_obj = add_obj(atom_vs, [], atom_fs, "atomic_cube")
+    atom_obj.parent = verts_object
 
-        return {"FINISHED"}
+    outline_obj = add_outline(array3d.shape, verts_object, self)
+    outline_obj.select = True
+    return "FINISHED"
+class AddVoxelDupliVerts(bpy.types.Operator,ImportHelper):
+    bl_idname  = "object.add_voxel_dupli_verts"
+    bl_label = "Voxel Dupliverts From .npy "
+    bl_description = "Visualize Voxel From .npy using dupliverts"
+    bl_options = {"REGISTER", "UNDO"}
+
+    filename_ext = ".npy"
+    filter_glob = StringProperty(default="*.npy", options={'HIDDEN'})
+
+    rescale = FloatVectorProperty(name="rescale", description = "rescale the voxel", default=(1.0,1.0,1.0),subtype="XYZ")
+    def execute(self, context):
+        import os
+        fname = bpy.path.abspath(self.properties.filepath)
+        print("reading: ", fname)
+        if os.path.isfile(fname):
+            array3d = np.load(fname)
+            if array3d.dtype != bool:
+                self.report({"ERROR"}, "Please set a array of bool. It is currently: {0}".format(array3d.dtype))
+                return {"CANCELLED"}
+            result = add_voxel_verts(array3d, self)
+            return {'FINISHED'}
+        else:
+            self.report({"ERROR"},"No such File")
+            return{"CANCELLED"}
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
 def menu_fn(self, context):
     self.layout.operator_context = 'INVOKE_DEFAULT'
     self.layout.separator()
-    self.layout.operator(AddVoxel.bl_idname)
+    self.layout.operator(AddVoxelSurface.bl_idname)
+    self.layout.operator(AddVoxelDupliVerts.bl_idname)
 def register():
     bpy.utils.register_module(__name__)
     bpy.types.INFO_MT_add.append(menu_fn)
