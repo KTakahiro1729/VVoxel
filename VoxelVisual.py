@@ -49,7 +49,7 @@ def add_outline(shape, voxel_obj, self):
     return outline_obj
 
 def add_voxel_surface(array3d, self):
-    print("start")
+    print("start making voxel")
     start = now()
 
     result = calc_vs(array3d, complexity = self.complexity)
@@ -103,7 +103,7 @@ def calc_axis_vs(diff,axis):
     del flat_diff
     minus_idx = np.where(skip_diff == -1)
     del skip_diff
-    print(1,now()-before)
+    # print(1,now()-before) # for debugging
     before = now()
     result = np.empty(skip_loc.shape[:-1]+(4,3)).astype(np.uint16)
     around_off ={'z': [[0, 0, -1], [0, 0, 0], [0, -1, 0], [0, -1, -1]],
@@ -112,19 +112,20 @@ def calc_axis_vs(diff,axis):
     for i in range(4):
         for j in range(3):
             result[...,i,j] = around_off[i][j] + skip_loc[...,j]
-    print(2,now()-before)
+    # print(2,now()-before)
     before = now()
     result[minus_idx] = np.flip(result[minus_idx],1)
     result = result.flatten().reshape(result.size//3,3)
-    print(3,now()-before)
+    # print(3,now()-before)
     before = now()
     return result
 def remove_doubles(vs,fs):
-    print("number of vertices: ",len(vs))
+    print("start remove doubles")
+    print("num of verts(before): ",len(vs))
     start = now()
     new_vs, inverse = np.unique(vs,return_inverse=True,axis=0)
     new_fs = inverse[fs]
-    print("number of vertices: ",len(new_vs))
+    print("num of verts(before): ",len(new_vs))
     print("remove doubles took: ",now()-start)
     return new_vs, new_fs
 
